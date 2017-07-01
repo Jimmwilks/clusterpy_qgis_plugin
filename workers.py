@@ -16,7 +16,7 @@ class Worker(QtCore.QObject):
 
     def run(self):
         pass
-
+     
 class MaxPWorker(Worker):
     ERROR_MSG = u"There are features from the shapefile that are disconnected. \
                 Check the areas identified with the following IDs for errors \
@@ -31,36 +31,35 @@ class MaxPWorker(Worker):
         provider = self.layer.dataProvider()
         curr = [ fl.name() for fl in provider.fields() ]
         nfn = newColumnName(curr)
-        maxpfield = QgsField(name = nfn, type = 2)
+        maxpfield = QgsField(name=nfn, type=2)
         newfields = QgsFields()
         newfields.extend(provider.fields())
         newfields.append(maxpfield)
 
         bad_value = -1
         clspyfeatures = {}
+        
+        spIndex = QgsSpatialIndex(provider.getFeatures())
         for feat in provider.getFeatures():
+            centroidval = feat.geometry().centroid().asPoint()
             uid = feat.id()
-            featids = []
-            for _ftr in provider.getFeatures():
-                if feat != _ftr and feat.geometry().touches(_ftr.geometry()):
-                    featids.append(_ftr.id())
+            featids = []           
+            featids = spIndex.nearestNeighbor(centroidval, 10)
             neighbors = set(featids)
             neighbors.discard(uid)
             thresholdval = feat.attribute(self.thresholdattr)
             attributeval = feat.attribute(self.attrname)
-
-            if thresholdval == None or attributeval == None:
+            if thresholdval == None or attributeval == None or centroidval == None: 
                 bad_value = uid
                 break
 
-            clspyfeatures[uid] = ClusterpyFeature(uid, thresholdval,
+            clspyfeatures[uid] = ClusterpyFeature(uid, centroidval, thresholdval,
                                                 neighbors, attributeval)
 
-        outputmsg = None
         valid = True
         if bad_value != -1:
             valid = False
-            outputmsg = "Please review feature with ID: " + str(bad_value) +\
+            outputmsg = "Please review feature with ID: " + str(bad_value) + \
             " and assign a numeric value to the NULL or empty attributes."
         else:
             valid, islands = validtopology(clspyfeatures)
@@ -73,7 +72,7 @@ class MaxPWorker(Worker):
                                     self.tabumax,
                                     self.progress.emit)
                 self.progress.emit(95.0)
-                newlayer = QgsVectorFileWriter( self.output_path,
+                newlayer = QgsVectorFileWriter(self.output_path,
                                                             None,
                                                             newfields,
                                                             provider.geometryType(),
@@ -95,7 +94,7 @@ class MaxPWorker(Worker):
         self.finished.emit(valid, outputmsg)
 
 # Get the name of the next MAXP execution column.
-def newColumnName(fields, basename = 'MAXP'):
+def newColumnName(fields, basename='MAXP'):
     last = -1
     for fld in fields:
         if fld.startswith(basename):

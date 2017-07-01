@@ -22,6 +22,7 @@ __revision__ = '$Format:%H$'
 __all__ = ['execmaxp', 'ClusterpyFeature', 'validtopology']
 
 from random import choice, sample
+import math
 
 MAXNUM = 99999
 
@@ -34,7 +35,7 @@ class ClusterpyFeature:
     """ Structure to represent a QGIS feature with the attributes of interest
     for Clusterpy
     """
-    def __init__(self, uid, threshold = 0, neighbors = set(), attribute = 0):
+    def __init__(self, uid, centroid, threshold = 0, neighbors = set(), attribute = 0):
         """ ClusterpyFeature initialiazer
         Parameters are:
         [1] uid         -> An Int value with the id of the feature.
@@ -55,6 +56,7 @@ class ClusterpyFeature:
         self.threshold = threshold
         self.neighbors = neighbors
         self.attribute = attribute
+        self.centroid = centroid
 
 class ClusterpyMap(list):
     """ Structure to represent a feasible regions configuration """
@@ -353,10 +355,12 @@ def centroid(region):
 
     [Not to be called explicitly]
     """
-    centroidval = 0.0
+    centroidval = [0.0,0.0] 
     for feature in region:
-        centroidval += feature.attribute
-    centroidval /= float(len(region))
+        centroidval[0] += feature.centroid.x()
+        centroidval[1] += feature.centroid.y()
+    centroidval[0] /= float(len(region)) 
+    centroidval[1] /= float(len(region)) 
     return centroidval
 
 def distancetoregion(feature, regioncentroid):
@@ -372,10 +376,13 @@ def distancetoregion(feature, regioncentroid):
 
     [Not to be called explicitly]
     """
-    distance = 0.0
-    distance = feature.attribute - regioncentroid
-    distance *= distance
-    return distance
+    distance = [0.0,0.0] 
+    distance[0] += feature.centroid.x()
+    distance[1] += feature.centroid.y() 
+    distance[0] -= regioncentroid[0] 
+    distance[1] -= regioncentroid[1] 
+    hypotenuse = math.hypot(distance[0],distance[1]) 
+    return hypotenuse
 
 def randomcandidatefeature(clspmap):
     """ Returns a random feature from the ClusterpyMap that can be moved from
