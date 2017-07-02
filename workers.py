@@ -40,6 +40,7 @@ class MaxPWorker(Worker):
         clspyfeatures = {}
         
         spIndex = QgsSpatialIndex(provider.getFeatures())
+        count = 0
         for feat in provider.getFeatures():
             centroidval = feat.geometry().centroid().asPoint()
             uid = feat.id()
@@ -53,23 +54,22 @@ class MaxPWorker(Worker):
                 bad_value = uid
                 break
 
-            clspyfeatures[uid] = ClusterpyFeature(uid, centroidval, thresholdval,
-                                                neighbors, attributeval)
-
+            clspyfeatures[uid] = ClusterpyFeature(uid, centroidval, thresholdval, neighbors, attributeval)
+            count += 1
+            progresssofar = count * 25/provider.featureCount()
+            self.progress.emit(progresssofar)
         valid = True
         if bad_value != -1:
             valid = False
             outputmsg = "Please review feature with ID: " + str(bad_value) + \
             " and assign a numeric value to the NULL or empty attributes."
         else:
-            self.progress.emit(1.0)
             regions = execmaxp(clspyfeatures,
                                 self.threshold,
                                 self.maxit,
                                 self.tabusize,
                                 self.tabumax,
                                 self.progress.emit)
-            self.progress.emit(95.0)
             newlayer = QgsVectorFileWriter(self.output_path,
                                                         None,
                                                         newfields,
@@ -104,4 +104,4 @@ def newColumnName(fields, basename='MAXP'):
     if last >= 0:
         num = str(last + 1)
 
-    return basename + num
+    return basename + num 

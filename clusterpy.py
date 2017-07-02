@@ -19,7 +19,7 @@ __copyright__ = '(C) 2014, RiSE Group'
 
 __revision__ = '$Format:%H$'
 
-__all__ = ['execmaxp', 'ClusterpyFeature', 'validtopology']
+__all__ = ['execmaxp', 'ClusterpyFeature']
 
 from random import choice, sample
 import math
@@ -179,9 +179,9 @@ def execmaxp(layer, threshold, maxit, tabulength, maxtabusteps, progress=None):
     REQTHRESHOLD = threshold
     feasiblepartitions = list()
     maxp = 0
-    sendprogress(progress, 10.0)
+    progressosfar = 25.0
     for _tmp in xrange(maxit):
-        partitions, enclaves, assignedfeatures = growregions()
+        partitions, enclaves, assignedfeatures, progressosfar = growregions(progress, progressosfar, maxit)
         numregions = len(partitions)
         if numregions > maxp:
             del feasiblepartitions[:]
@@ -189,19 +189,17 @@ def execmaxp(layer, threshold, maxit, tabulength, maxtabusteps, progress=None):
             maxp = numregions
         elif numregions == maxp:
             feasiblepartitions.append((partitions, enclaves, assignedfeatures))
-    sendprogress(progress, 50.0)
     bestobjfunction = MAXNUM
     bestpartition = None
     for partitions, enclaves, assigned in feasiblepartitions:
-        regions = assignenclaves(partitions, enclaves, assigned)
-        localsearch(regions, tabulength, maxtabusteps)
+        regions, progressosfar = assignenclaves(partitions, enclaves, assigned, progress, progressosfar, len(feasiblepartitions))
+        progressosfar = localsearch(regions, tabulength, maxtabusteps, progress, progressosfar, len(feasiblepartitions))
         if regions.objfunction < bestobjfunction or bestpartition == None:
             bestobjfunction = regions.objfunction
             bestpartition = regions.clone()
-    sendprogress(progress, 90.0)
     return bestpartition.regions
 
-def growregions():
+def growregions(progress, progressosfar, maxit):
     """ Phase 1 of maxp algorithm [Not to be called explicitly] """
     partitions = ClusterpyMap()
     unassigned = SetOfFeatures(LAYERFEATURES.values())
@@ -241,10 +239,15 @@ def growregions():
         if feasible:
             partitions.append(region)
             visited.update(region)
-    return partitions, unassigned, assigned
+        thisloopprogress = float(len(visited))*(25.0/float(maxit))/float(featurescount)
+        sendprogress(progress, progressosfar + thisloopprogress)
+    progressosfar = progressosfar + thisloopprogress
+    return partitions, unassigned, assigned, progressosfar
 
-def assignenclaves(partitions, enclaves, assignedfeatures):
+def assignenclaves(partitions, enclaves, assignedfeatures, progress, progressosfar, feasiblepartitions):
     """ Phase 2 of Maxp algorithm [Not to be called explicitly] """
+    count = 0
+    enclavecount = float(len(enclaves))
     while len(enclaves) > 0:
         feature = None
         assignedneighbor = None
@@ -264,9 +267,13 @@ def assignenclaves(partitions, enclaves, assignedfeatures):
         selectedregion.add(feature)
         assignedfeatures.add(feature)
         enclaves.remove(feature)
-    return partitions
+        count += 1
+        thisloopprogress = float(count)*(25.0/float(feasiblepartitions))/enclavecount
+        sendprogress(progress, progressosfar + thisloopprogress)
+    progressosfar = progressosfar + thisloopprogress
+    return partitions, progressosfar
 
-def localsearch(regions, tabulength, maxtabusteps):
+def localsearch(regions, tabulength, maxtabusteps,progress, progressosfar, feasiblepartitions):
     """ Local search phase in Max-p. TabuMove [Not to be called explicitly] """
     bestregions = regions
     tmpregions = regions.clone()
@@ -297,7 +304,11 @@ def localsearch(regions, tabulength, maxtabusteps):
             tabulist[:] = tabulist[-tabulength:]
         else:
             tabusteps = maxtabusteps
+        thisloopprogress = float(tabusteps)*(25.0/float(feasiblepartitions))/float(maxtabusteps)
+        sendprogress(progress, progressosfar + thisloopprogress)
+    progressosfar = progressosfar + thisloopprogress
     regions = bestregions
+    return progressosfar
 
 def selectnextfeature(possiblefeatures, regiontojoin):
     """ Selects the best feature from possiblefeature to add to regiontojoin
@@ -420,29 +431,3 @@ def featureneighborregions(regions, feature, fromregion):
                 neighborregions.append(partition)
                 break
     return neighborregions
-
-def validtopology(features):
-    """ Checks if the topology of the shapefile is valid for running
-    Clusterpy.
-    Parameters are:
-    [1] A dictionary of ClusterpyFeature
-
-    Returns a tuple. A boolean value: True if valid, False otherwise.
-    And an array containing the uids of the features causing trouble.
-    """
-    topology = { }
-    feature = None
-    for feature in features.values():
-        if len(feature.neighbors) < 1:
-            return False, [feature.uid]
-        topology[feature.uid] = feature.neighbors
-
-    tovisit = set([feature.uid])
-    visitedareas = set([feature.uid])
-    while len(tovisit) > 0:
-        area = tovisit.pop()
-        visitedareas.add(area)
-        tovisit.update(topology[area])
-        tovisit.difference_update(visitedareas)
-    islands = visitedareas.symmetric_difference(topology.keys())
-    return len(islands) == 0, list(islands)
