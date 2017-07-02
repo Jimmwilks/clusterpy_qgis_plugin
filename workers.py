@@ -5,7 +5,7 @@ from qgis.core import *
 from PyQt4 import QtCore, QtGui
 
 __all__ = ['MaxPWorker']
-from clusterpy import ClusterpyFeature, execmaxp, validtopology
+from clusterpy import ClusterpyFeature, execmaxp
 
 class Worker(QtCore.QObject):
     finished = QtCore.pyqtSignal(bool, basestring)
@@ -62,34 +62,30 @@ class MaxPWorker(Worker):
             outputmsg = "Please review feature with ID: " + str(bad_value) + \
             " and assign a numeric value to the NULL or empty attributes."
         else:
-            valid, islands = validtopology(clspyfeatures)
-            if valid:
-                self.progress.emit(1.0)
-                regions = execmaxp(clspyfeatures,
-                                    self.threshold,
-                                    self.maxit,
-                                    self.tabusize,
-                                    self.tabumax,
-                                    self.progress.emit)
-                self.progress.emit(95.0)
-                newlayer = QgsVectorFileWriter(self.output_path,
-                                                            None,
-                                                            newfields,
-                                                            provider.geometryType(),
-                                                            provider.crs())
+            self.progress.emit(1.0)
+            regions = execmaxp(clspyfeatures,
+                                self.threshold,
+                                self.maxit,
+                                self.tabusize,
+                                self.tabumax,
+                                self.progress.emit)
+            self.progress.emit(95.0)
+            newlayer = QgsVectorFileWriter(self.output_path,
+                                                        None,
+                                                        newfields,
+                                                        provider.geometryType(),
+                                                        provider.crs())
 
-                for area in self.layer.getFeatures():
-                    newarea = QgsFeature()
-                    newarea.setGeometry(area.geometry())
-                    attrs = area.attributes()
-                    attrs.append(regions[area.id()])
-                    newarea.setAttributes(attrs)
-                    newlayer.addFeature(newarea)
+            for area in self.layer.getFeatures():
+                newarea = QgsFeature()
+                newarea.setGeometry(area.geometry())
+                attrs = area.attributes()
+                attrs.append(regions[area.id()])
+                newarea.setAttributes(attrs)
+                newlayer.addFeature(newarea)
 
-                del newlayer
-                outputmsg = self.output_path
-            else:
-                outputmsg = self.ERROR_MSG + str(map(str, islands))
+            del newlayer
+            outputmsg = self.output_path
         self.progress.emit(100.0)
         self.finished.emit(valid, outputmsg)
 
